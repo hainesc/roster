@@ -7,7 +7,12 @@ import (
 )
 const (
 	// TODO: read baseURL from config.
-	baseURL = "https://accounts.example.com"
+	baseURL    =  "https://accounts.example.com"
+	AuthPath   =  "/auth"
+	TokenPath  =  "/token"
+	KeysPath   =  "/keys"
+	UserPath   =  "/user"
+	RevokePath =  "/revoke"
 )
 
 type Discovery struct {
