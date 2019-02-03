@@ -3,6 +3,7 @@ package discovery
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	jose "gopkg.in/square/go-jose.v2"
 )
 const (
@@ -41,7 +42,7 @@ func NewDiscoveryHandler() *DiscoveryHandler {
 }
 
 func (d *DiscoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	response, _ := json.MarshalIndent(&Discovery{
+	data, _ := json.MarshalIndent(&Discovery{
 	Issuer:        baseURL,
 	Auth:          baseURL + "/auth",
 	Token:         baseURL + "/token",
@@ -56,5 +57,8 @@ func (d *DiscoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	Claims:        []string{"aud", "email", "email_verified", "exp", "family_name", "given_name", "iat", "iss", "locale", "name", "picture", "sub"},
 	CodeMethods:   []string{"plain", "S256"},
 	}, "", " ")
-	w.Write(response)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
 }
