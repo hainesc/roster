@@ -1,17 +1,31 @@
-package discovery
+package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/hainesc/roster/pkg/store"
 	jose "gopkg.in/square/go-jose.v2"
 )
+
+type OIDCHandler struct {
+	store store.Store
+}
+
+func NewOIDCHandler(store store.Store) *OIDCHandler {
+	return &OIDCHandler{
+		store: store,
+	}
+}
+
 const (
 	// TODO: read baseURL from config.
 	baseURL    =  "https://accounts.example.com"
 	AuthPath   =  "/auth"
 	TokenPath  =  "/token"
-	KeysPath   =  "/keys"
+	KeysPath   =  "/jwts"
 	UserPath   =  "/user"
 	RevokePath =  "/revoke"
 )
@@ -34,14 +48,7 @@ type Discovery struct {
 	CodeMethods   []string `json:"code_challenge_methods_supported"`
 }
 
-type DiscoveryHandler struct {
-}
-
-func NewDiscoveryHandler() *DiscoveryHandler {
-	return &DiscoveryHandler{}
-}
-
-func (d *DiscoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (o *OIDCHandler) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.MarshalIndent(&Discovery{
 	Issuer:        baseURL,
 	Auth:          baseURL + "/auth",
@@ -61,4 +68,24 @@ func (d *DiscoveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
+}
+
+func (o *OIDCHandler) HandleJWTS(w http.ResponseWriter, r *http.Request) {
+	// w.Write([]byte("Not implemented"))
+
+	keys, _ := o.store.GetKeys()
+	jwks := jose.JSONWebKeySet{
+		Keys: make([]jose.JSONWebKey, 1),
+	}
+	jwks.Keys[0] = *keys.SigningKeyPub
+	data, _ := json.MarshalIndent(jwks, "", "  ")
+	// TODO:
+	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d, must-revalidate", 3600 * 24 * 30))
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
+}
+
+func (o *OIDCHandler) HandleAuth(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Not implemented"))
 }
