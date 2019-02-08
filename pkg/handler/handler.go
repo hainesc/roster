@@ -92,7 +92,7 @@ func (o *OIDCHandler) HandleJWTS(w http.ResponseWriter, r *http.Request) {
 	jwks.Keys[0] = *keys.SigningKeyPub
 	data, _ := json.MarshalIndent(jwks, "", "  ")
 	// TODO:
-	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d, must-revalidate", 3600 * 24 * 30))
+	// w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d, must-revalidate", 3600 * 24 * 30))
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
@@ -237,7 +237,7 @@ var signinTmpl = template.Must(template.New("signin.html").Parse(`<html>
   </body>
 </html>`))
 
-var signinIDTmpl = template.Must(template.New("signin.html").Parse(`<html>
+var signinIDTmpl = template.Must(template.New("signinid.html").Parse(`<html>
   <body>
     <form action="/signin/identifier?{{ .Query }}" method="post">
        <p>
@@ -310,7 +310,9 @@ func (o *OIDCHandler) HandleSignID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// TODO: read cookie, if cookie match some user and not expires, then redirect to signed in page or to consent page.
-		renderTemplate(w, signinIDTmpl, nil)
+		renderTemplate(w, signinIDTmpl, map[string]interface{}{
+			"Query": template.URL(r.URL.RawQuery),
+		})
 	case http.MethodPost:
 		userName := r.FormValue("user_name")
 		password := r.FormValue("password")
@@ -370,9 +372,10 @@ func (o *OIDCHandler) HandleConsent(w http.ResponseWriter, r *http.Request) {
 			CodeID: codeID,
 			ClientID: client_id,
 			UserName: v.Get("user"),
-			Scope:    v["scope"],
+			Scope:    strings.Fields(v.Get("scope")),
 			Nonce:    v.Get("nonce"),
 		}
+
 		o.store.WriteCodeID(codeID, code)
 		q := u.Query()
 		q.Set("code", codeID)
@@ -468,6 +471,7 @@ func (o *OIDCHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
 		refresh_token := ""
 		verified := true;
 		for _, scope := range code.Scope {
+			fmt.Printf("Current scope: %s\n", scope)
 			switch {
 			case scope == "email":
 				idToken.Email = userName + "@example.com"
