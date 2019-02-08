@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 	"github.com/hainesc/roster/pkg/config"
-	"github.com/hainesc/roster/pkg/handler/discovery"
 	"github.com/hainesc/roster/pkg/handler"
 	"github.com/hainesc/roster/pkg/store"
 	"github.com/hainesc/roster/pkg/store/memory"
@@ -19,7 +18,8 @@ type Server struct {
 // NewServer constructs a server from the provided config.
 func NewServer(ctx context.Context, c *config.RosterConf) (*Server, error) {
 	return &Server{
-		stor: &memory.Memory{},
+		// stor: &memory.Memory{},
+		stor: memory.NewMemory(),
 	}, nil
 }
 
@@ -28,17 +28,15 @@ func (s *Server) Serve() error {
 	go s.RotateKeysPeriodly(context.TODO())
 	// http.Handle("/", http.FileServer(http.Dir("./cockscomb")))
 	http.HandleFunc("/.well-known/openid-configuration", oidc.HandleDiscovery)
-	http.HandleFunc(discovery.KeysPath, oidc.HandleJWTS)
-	http.HandleFunc(discovery.AuthPath, oidc.HandleAuth)
-	// TODO:
-	// http.Handle(discovery.TokenPath, token.NewTokenHandler())
-	// http.Handle(discovery.UserPath, user.NewUserHandler())
-	// http.Handle(discovery.RevokePath, revoke.NewRevokeHandler())
-	// http.Handle("/signin", )
-	// http.Handle("/signup", )
-	// http.Handle("/clients") client_register.
-	// http.Handle("/logout")
-	return http.ListenAndServe(":5566", nil)
+	http.HandleFunc("/jwts", oidc.HandleJWTS)
+	http.HandleFunc("/auth", oidc.HandleAuth)
+	http.HandleFunc("/clients", oidc.HandleClient)
+	http.HandleFunc("/signup", oidc.HandleSignup)
+	http.HandleFunc("/signin", oidc.HandleSignin)
+	http.HandleFunc("/signin/identifier", oidc.HandleSignID)
+	http.HandleFunc("/signin/consent", oidc.HandleConsent)
+
+	return http.ListenAndServe(":80", nil)
 }
 
 func (s *Server) RotateKeysPeriodly(ctx context.Context) {
