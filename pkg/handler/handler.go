@@ -2,7 +2,9 @@ package handler
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/json"
 
 	"fmt"
@@ -12,8 +14,10 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 	"github.com/hainesc/roster/pkg/claims"
 	"github.com/hainesc/roster/pkg/client"
+	"github.com/hainesc/roster/pkg/code"
 	"github.com/hainesc/roster/pkg/store"
 	jose "gopkg.in/square/go-jose.v2"
 )
@@ -58,19 +62,19 @@ type Discovery struct {
 
 func (o *OIDCHandler) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.MarshalIndent(&Discovery{
-	Issuer:        baseURL,
-	Auth:          baseURL + "/auth",
-	Token:         baseURL + "/token",
-	Keys:          baseURL + "/keys",
-	User:          baseURL + "/user",
-	Revoke:        baseURL + "/revoke",
-	ResponseTypes: []string{"code", "token", "id_token", "code token", "code id_token", "token id_token", "code token id_token", "none"},
-	Subjects:      []string{"public"},
-	IDTokenAlgs:   []string{string(jose.RS256)},
-	Scopes:        []string{"openid", "email", "groups", "profile", "offline_access"},
-	AuthMethods:   []string{"client_secret_post", "client_secret_basic"},
-	Claims:        []string{"aud", "email", "email_verified", "exp", "family_name", "given_name", "iat", "iss", "locale", "name", "picture", "sub"},
-	CodeMethods:   []string{"plain", "S256"},
+		Issuer:        baseURL,
+		Auth:          baseURL + "/auth",
+		Token:         baseURL + "/token",
+		Keys:          baseURL + "/jwts",
+		User:          baseURL + "/user",
+		Revoke:        baseURL + "/revoke",
+		ResponseTypes: []string{"code", "token", "id_token", "code token", "code id_token", "token id_token", "code token id_token", "none"},
+		Subjects:      []string{"public"},
+		IDTokenAlgs:   []string{string(jose.RS256)},
+		Scopes:        []string{"openid", "email", "groups", "profile", "offline_access"},
+		AuthMethods:   []string{"client_secret_post", "client_secret_basic"},
+		Claims:        []string{"aud", "email", "email_verified", "exp", "family_name", "given_name", "iat", "iss", "locale", "name", "picture", "sub"},
+		CodeMethods:   []string{"plain", "S256"},
 	}, "", " ")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -338,7 +342,8 @@ func (o *OIDCHandler) HandleSignID(w http.ResponseWriter, r *http.Request) {
 			Path:       "/",
 			RawExpires: "0",
 		})
-		http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
+		v.Set("user", userName)
+		http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + v.Encode(), http.StatusFound)
 	}
 }
 
@@ -361,7 +366,14 @@ func (o *OIDCHandler) HandleConsent(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("url to string: %s", u.String())
 
 		codeID := NewID()
-		o.store.WriteCodeID(codeID)
+		code := code.Code{
+			CodeID: codeID,
+			ClientID: client_id,
+			UserName: v.Get("user"),
+			Scope:    v["scope"],
+			Nonce:    v.Get("nonce"),
+		}
+		o.store.WriteCodeID(codeID, code)
 		q := u.Query()
 		q.Set("code", codeID)
 		q.Set("state", v.Get("state"))
@@ -394,4 +406,116 @@ func NewID() string {
 
 func (o *OIDCHandler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("You are signed in, this is your personal page, you can view, modify your personal information, but it is not implemented now."))
+}
+
+func (o *OIDCHandler) HandleToken(w http.ResponseWriter, r *http.Request) {
+	grantType := r.PostFormValue("grant_type")
+	switch grantType {
+	case "authorization_code":
+
+		clientID, clientSecret, ok := r.BasicAuth()
+		if ok {
+			var err error
+			if clientID, err = url.QueryUnescape(clientID); err != nil {
+				w.Write([]byte("Error get client id in handle token"))
+				return
+			}
+			if clientSecret, err = url.QueryUnescape(clientSecret); err != nil {
+				w.Write([]byte("Error get client secret in handle token"))
+				return
+			}
+		} else {
+			clientID = r.PostFormValue("client_id")
+			clientSecret = r.PostFormValue("client_secret")
+		}
+
+		codeID := r.PostFormValue("code")
+		// redirectURI := r.PostFormValue("redirect_uri")
+		code, _ := o.store.GetCode(codeID)
+		fmt.Printf("Code is: %s\n", codeID)
+		// The code is one time used.
+		defer o.store.DeleteCode(codeID)
+		userName := code.UserName
+		// TODO: the code should have a expire field and we should check it here.
+		accessToken := NewID()
+		// TODO: config it.
+		issuedAt := time.Now()
+		expiry := issuedAt.Add(time.Hour * 24 * 30)
+
+		// atHash, _ := accessTokenHash(signingAlg, accessToken)
+		hashAlg := sha256.New
+		hash := hashAlg()
+		if _, err := io.WriteString(hash, accessToken); err != nil {
+			w.Write([]byte("Error atHash"))
+			return
+		}
+		sum := hash.Sum(nil)
+		atHash := base64.RawURLEncoding.EncodeToString(sum[:len(sum)/2])
+
+		idToken := claims.IDTokenClaims{
+			Issuer: "http://accounts.example.com",
+			// TODO: A Subject Identifier is a locally unique and never reassigned identifier within the Issuer for the End-User.
+			Subject: userName,
+			Nonce: code.Nonce,
+			Expiry: expiry.Unix(),
+			IssuedAt: issuedAt.Unix(),
+			AccessTokenHash: atHash,
+			// Email: userName + "@example.com",
+			// EmailVerified: true,
+			// Name: userName,
+		}
+		idToken.Audience = []string{clientID}
+		refresh_token := ""
+		verified := true;
+		for _, scope := range code.Scope {
+			switch {
+			case scope == "email":
+				idToken.Email = userName + "@example.com"
+				idToken.EmailVerified = &verified
+			case scope == "groups":
+				idToken.Groups = []string{"example"}
+			case scope == "profile":
+				idToken.Name = userName
+			case scope == "offline_access":
+				// TODO: we need refresh token. but it maybe not the best place for the code.
+				refresh_token = NewID()
+			}
+		}
+
+		payload, _ := json.Marshal(idToken)
+		key, _ := o.store.GetKeys()
+		signer, _ := jose.NewSigner(jose.SigningKey{Key: key.SigningKey, Algorithm: jose.RS256}, &jose.SignerOptions{})
+		signature, _ := signer.Sign(payload)
+		jwt, _ := signature.CompactSerialize()
+
+		// TODO: There is no information in access_token, so it should written in db as it will be used to access more information.
+		o.writeAccessToken(w, jwt, accessToken, refresh_token, expiry)
+
+	case "refresh_token":
+		w.Write([]byte("Not implemented"))
+	}
+}
+
+func (o *OIDCHandler) writeAccessToken(w http.ResponseWriter, idToken, accessToken, refreshToken string, expiry time.Time) {
+	// TODO(ericchiang): figure out an access token story and support the user info
+	// endpoint. For now use a random value so no one depends on the access_token
+	// holding a specific structure.
+	resp := struct {
+		AccessToken  string `json:"access_token"`
+		TokenType    string `json:"token_type"`
+		ExpiresIn    int    `json:"expires_in"`
+		RefreshToken string `json:"refresh_token,omitempty"`
+		IDToken      string `json:"id_token"`
+	}{
+		accessToken,
+		"bearer",
+		int(expiry.Sub(time.Now()).Seconds()),
+		refreshToken,
+		idToken,
+	}
+	data, _ := json.Marshal(resp)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
 }

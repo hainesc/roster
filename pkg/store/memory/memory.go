@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"crypto/rsa"
 	"github.com/hainesc/roster/pkg/client"
+	"github.com/hainesc/roster/pkg/code"
 	"github.com/hainesc/roster/pkg/keys"
 
 	"github.com/hainesc/roster/pkg/store"
@@ -14,14 +15,14 @@ type Memory struct {
 	k keys.Keys
 	clients map[string]client.Client
 	users map[string]string
-	codes map[string]string
+	codes map[string]code.Code
 }
 
 func NewMemory() *Memory {
 	return &Memory{
 		clients: make(map[string]client.Client),
 		users: make(map[string]string),
-		codes: make(map[string]string),
+		codes: make(map[string]code.Code),
 	}
 }
 // Memory implements the Store interface
@@ -77,7 +78,16 @@ func (m *Memory) Check(username, password string) error {
 	return fmt.Errorf("User not found or password is wrong")
 }
 
-func (m *Memory) WriteCodeID(codeID string) error {
-	m.codes[codeID] = "1"
+func (m *Memory) WriteCodeID(codeID string, c code.Code) error {
+	m.codes[codeID] = c
+	return nil
+}
+
+func (m *Memory) GetCode(codeID string) (code.Code, error) {
+	return m.codes[codeID], nil
+}
+
+func (m *Memory) DeleteCode(codeID string) error {
+	delete(m.codes, codeID)
 	return nil
 }

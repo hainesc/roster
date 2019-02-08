@@ -2,6 +2,7 @@ package store
 
 import (
 	"github.com/hainesc/roster/pkg/client"
+	"github.com/hainesc/roster/pkg/code"
 	"github.com/hainesc/roster/pkg/keys"
 )
 type Store interface {
@@ -11,5 +12,7 @@ type Store interface {
 	GetClient(string) (client.Client, error)
 	Signup(string, string) error
 	Check(string, string) error
-	WriteCodeID(string) error
+	WriteCodeID(string, code.Code) error
+	GetCode(string) (code.Code, error)
+	DeleteCode(string) error
 }

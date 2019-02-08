@@ -34,6 +34,7 @@ func (s *Server) Serve() error {
 	http.HandleFunc("/signin/identifier", oidc.HandleSignID)
 	http.HandleFunc("/signin/consent", oidc.HandleConsent)
 	http.HandleFunc("/me", oidc.HandleMe)
+	http.HandleFunc("/token", oidc.HandleToken)
 
 	return http.ListenAndServe(":80", nil)
 }
