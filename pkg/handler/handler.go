@@ -233,38 +233,35 @@ var signinTmpl = template.Must(template.New("signin.html").Parse(`<html>
   </body>
 </html>`))
 
+var signinIDTmpl = template.Must(template.New("signin.html").Parse(`<html>
+  <body>
+    <form action="/signin/identifier?{{ .Query }}" method="post">
+       <p>
+         User name: <input type="text" name="user_name" placeholder="hainesc">
+       </p>
+       <p>
+         Password: <input type="password" name="password">
+       </p>
+       <input type="submit" value="SignIn">
+    </form>
+  </body>
+</html>`))
+
 // We use id token and cookie to indicate the user have signed in.
 func (o *OIDCHandler) HandleSignin(w http.ResponseWriter, r *http.Request) {
-	// raw := r.URL.RawQuery
-	oidc_mode := false
-	v := r.URL.Query()
-	if v["client_id"] != nil {
-		// oidc mode, we should redirect to consent page on success sign in.
-		oidc_mode = true
-	}
 	switch r.Method {
 	case http.MethodGet:
 		_, err := r.Cookie("AccessToken")
 		if err == nil {
 			// verify the cookied and login the declared user.
-			if oidc_mode {
-				http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
-				return
-			} else {
-				w.Write([]byte("Sign in success"))
-				return
-			}
+			http.Redirect(w, r, "http://accounts.example.com/me", http.StatusFound)
 		}
-		// TODO: read cookie, if cookie match some user and not expires, then redirect to signed in page or to consent page.
 		renderTemplate(w, signinTmpl, nil)
 	case http.MethodPost:
 		userName := r.FormValue("user_name")
 		password := r.FormValue("password")
 		fmt.Println("User name: %s", userName)
 		fmt.Println("Password: %s", password)
-
-		// TODO: requre more field when signup, so we can get the information here.
-		// The line below is just an prototype.
 
 		if err := o.store.Check(userName, password); err != nil {
 			w.Write([]byte("User not found or password is wrong."))
@@ -289,54 +286,39 @@ func (o *OIDCHandler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 			Path:       "/",
 			RawExpires: "0",
 		})
-		if oidc_mode {
-			http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
-		} else {
-			w.Write([]byte("Sign in success"))
-		}
+
+		http.Redirect(w, r, "http://accounts.example.com/me", http.StatusFound)
 	}
-
-	// w.Write([]byte("Not implemented"))
 }
-
 
 // We use id token and cookie to indicate the user have signed in.
 func (o *OIDCHandler) HandleSignID(w http.ResponseWriter, r *http.Request) {
-	// raw := r.URL.RawQuery
-	oidc_mode := false
 	v := r.URL.Query()
-	if v["client_id"] != nil {
-		// oidc mode, we should redirect to consent page on success sign in.
-		oidc_mode = true
+	if v["client_id"] == nil {
+		w.Write([]byte("The handle is designed to handle oidc flow, you are wrong in here, it is just a prototype now."))
 	}
 	switch r.Method {
 	case http.MethodGet:
 		_, err := r.Cookie("AccessToken")
 		if err == nil {
 			// verify the cookied and login the declared user.
-			if oidc_mode {
-				http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
-				return
-			} else {
-				w.Write([]byte("Sign in success"))
-				return
-			}
+			http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
+			return
 		}
 		// TODO: read cookie, if cookie match some user and not expires, then redirect to signed in page or to consent page.
-		renderTemplate(w, signinTmpl, nil)
+		renderTemplate(w, signinIDTmpl, nil)
 	case http.MethodPost:
 		userName := r.FormValue("user_name")
 		password := r.FormValue("password")
 		fmt.Println("User name: %s", userName)
 		fmt.Println("Password: %s", password)
 
-		// TODO: requre more field when signup, so we can get the information here.
-		// The line below is just an prototype.
-
 		if err := o.store.Check(userName, password); err != nil {
 			w.Write([]byte("User not found or password is wrong."))
 			return
 		}
+		// TODO: requre more field when signup, so we can get the information here.
+		// The line below is just an prototype.
 		c := &claims.Claims{
 			UserID: userName,
 			Username: userName,
@@ -356,14 +338,8 @@ func (o *OIDCHandler) HandleSignID(w http.ResponseWriter, r *http.Request) {
 			Path:       "/",
 			RawExpires: "0",
 		})
-		if oidc_mode {
-			http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
-		} else {
-			w.Write([]byte("Sign in success"))
-		}
+		http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
 	}
-
-	// w.Write([]byte("Not implemented"))
 }
 
 // We use id token and cookie to indicate the user have signed in.
@@ -414,4 +390,8 @@ func NewID() string {
 	}
 	// Avoid the identifier to begin with number and trim padding
 	return string(buff[0]%26+'a') + strings.TrimRight(encoding.EncodeToString(buff[1:]), "=")
+}
+
+func (o *OIDCHandler) HandleMe(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("You are signed in, this is your personal page, you can view, modify your personal information, but it is not implemented now."))
 }

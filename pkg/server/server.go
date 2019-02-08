@@ -18,7 +18,6 @@ type Server struct {
 // NewServer constructs a server from the provided config.
 func NewServer(ctx context.Context, c *config.RosterConf) (*Server, error) {
 	return &Server{
-		// stor: &memory.Memory{},
 		stor: memory.NewMemory(),
 	}, nil
 }
@@ -26,7 +25,6 @@ func NewServer(ctx context.Context, c *config.RosterConf) (*Server, error) {
 func (s *Server) Serve() error {
 	oidc := handler.NewOIDCHandler(s.stor)
 	go s.RotateKeysPeriodly(context.TODO())
-	// http.Handle("/", http.FileServer(http.Dir("./cockscomb")))
 	http.HandleFunc("/.well-known/openid-configuration", oidc.HandleDiscovery)
 	http.HandleFunc("/jwts", oidc.HandleJWTS)
 	http.HandleFunc("/auth", oidc.HandleAuth)
@@ -35,6 +33,7 @@ func (s *Server) Serve() error {
 	http.HandleFunc("/signin", oidc.HandleSignin)
 	http.HandleFunc("/signin/identifier", oidc.HandleSignID)
 	http.HandleFunc("/signin/consent", oidc.HandleConsent)
+	http.HandleFunc("/me", oidc.HandleMe)
 
 	return http.ListenAndServe(":80", nil)
 }
