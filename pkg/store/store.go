@@ -12,6 +12,7 @@ type Store interface {
 	GetClient(string) (client.Client, error)
 	Signup(string, string) error
 	Check(string, string) error
+	Exists(string) bool
 	WriteCodeID(string, code.Code) error
 	GetCode(string) (code.Code, error)
 	DeleteCode(string) error

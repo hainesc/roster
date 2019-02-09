@@ -78,6 +78,13 @@ func (m *Memory) Check(username, password string) error {
 	return fmt.Errorf("User not found or password is wrong")
 }
 
+func (m *Memory) Exists(username string) bool {
+	if _, ok := m.users[username]; ok {
+		return true
+	}
+	return false
+}
+
 func (m *Memory) WriteCodeID(codeID string, c code.Code) error {
 	m.codes[codeID] = c
 	return nil

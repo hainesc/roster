@@ -255,10 +255,18 @@ var signinIDTmpl = template.Must(template.New("signinid.html").Parse(`<html>
 func (o *OIDCHandler) HandleSignin(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		_, err := r.Cookie("AccessToken")
+		cookie, err := r.Cookie("AccessToken")
 		if err == nil {
-			// verify the cookied and login the declared user.
-			http.Redirect(w, r, "http://accounts.example.com/me", http.StatusFound)
+			var c claims.Claims
+			rawToken := strings.Split(cookie.Value, ".")[1]
+			payload, _ := base64.RawURLEncoding.DecodeString(rawToken)
+			json.Unmarshal(payload, &c)
+			// TODO: security, verify the signature.
+			userName := c.Username
+			if ok := o.store.Exists(userName); ok {
+				// verify the cookied and login the declared user.
+				http.Redirect(w, r, "http://accounts.example.com/me", http.StatusFound)
+			}
 		}
 		renderTemplate(w, signinTmpl, nil)
 	case http.MethodPost:
@@ -303,11 +311,19 @@ func (o *OIDCHandler) HandleSignID(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		_, err := r.Cookie("AccessToken")
+		cookie, err := r.Cookie("AccessToken")
 		if err == nil {
-			// verify the cookied and login the declared user.
-			http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + r.URL.RawQuery, http.StatusFound)
-			return
+			var c claims.Claims
+			rawToken := strings.Split(cookie.Value, ".")[1]
+			payload, _ := base64.RawURLEncoding.DecodeString(rawToken)
+			json.Unmarshal(payload, &c)
+			// TODO: security, verify the signature.
+			userName := c.Username
+			v.Set("user", userName)
+			if ok := o.store.Exists(userName); ok {
+				// verify the cookied and login the declared user.
+				http.Redirect(w, r, "http://accounts.example.com/signin/consent?" + v.Encode(), http.StatusFound)
+			}
 		}
 		// TODO: read cookie, if cookie match some user and not expires, then redirect to signed in page or to consent page.
 		renderTemplate(w, signinIDTmpl, map[string]interface{}{
